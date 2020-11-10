@@ -1,0 +1,98 @@
+$a=Get-adcomputer -Filter *  -Properties * -SearchBase "DC=,DC=,DC=COM" 
+$array=@()
+#$array= "*virtual*","*Mac*","*Server*","*Netapp*"
+#$c= $a| Where-Object {$_.operatingsystem -notcontains $array} |  select Name,Operatingsystem,Distinguishedname #| export-csv .\adreport3.csv -NoTypeInformation
+foreach($b in $a)
+{
+if($b.operatingsystem -like "*Windows 7*" -or ($b.operatingsystem -like "*Windows 10*" -and $b.operatingsystem -notlike "*Windows 10 Enterprise for Virtual Desktops*" )){
+
+$array += $b
+}
+}
+$array | select name,operatingsystem,Distinguishedname | export-csv D:\SCCM_AD\AD_info.csv -NoTypeInformation
+
+$SQLServer = "sqlserver"
+$SQLDBName = "database"
+#$uid =""
+#$cred_passfile = "C:\cred_vc.txt"  
+#$pwd = ConvertFrom-SecureToPlain (cat $cred_passfile | convertto-securestring)   ## Get password from password file
+    
+$SqlQuery = "select distinct s.Netbios_Name0 as Name, s.Resource_Domain_OR_Workgr0,os.Caption0, os.LastBootUpTime0 
+									from v_R_System s, v_GS_OPERATING_SYSTEM os, v_FullCollectionMembership fcm
+									where s.ResourceID = os.ResourceID and s.ResourceID =fcm.ResourceID and fcm.CollectionID='##CollectionName##'"
+$SqlConnection = New-Object System.Data.SqlClient.SqlConnection
+$SqlConnection.ConnectionString = "Server = $SQLServer; Database = $SQLDBName; Integrated Security = True;"
+$SqlCmd = New-Object System.Data.SqlClient.SqlCommand
+$SqlCmd.CommandText = $SqlQuery
+$SqlCmd.Connection = $SqlConnection
+$SqlAdapter = New-Object System.Data.SqlClient.SqlDataAdapter
+$SqlAdapter.SelectCommand = $SqlCmd
+$DataSet = New-Object System.Data.DataSet
+$SqlAdapter.Fill($DataSet) | Out-Null
+$SqlConnection.Close
+$DataSet.Tables[0] | Export-Csv -Path "D:\SCCM_AD\SCCM_info.csv" -NoTypeInformation
+
+$File1 = Import-Csv -Path "D:\SCCM_AD\AD_info.csv"
+
+#Importing CSV
+$File2 = Import-Csv -Path "D:\SCCM_AD\SCCM_info.csv"
+ 
+
+"Total no machines available in AD:"+$File1.count
+"Total no machines available in SCCM:"+$File2.count
+
+#Compare both CSV files - column SamAccountName
+$Results = Compare-Object $File1 $File2 -Property Name -IncludeEqual
+
+$Array = @()
+$Array1 = @()
+$Array2 =@()
+Foreach($R in $Results)
+{
+If( $R.sideindicator -eq "==" )
+{
+$Object = [pscustomobject][ordered] @{
+
+Computer = $R.Name
+"Compare indicator" = $R.sideindicator
+
+}
+$Array += $Object
+}
+If( $R.sideindicator -eq "=>" )
+{
+$Object1 = [pscustomobject][ordered] @{
+
+Computer = $R.Name
+"Compare indicator" = $R.sideindicator
+
+}
+$Array1 += $Object1
+
+ 
+
+}
+If( $R.sideindicator -eq "<=" )
+{
+$Object2 = [pscustomobject][ordered] @{
+
+Computer = $R.Name
+"Compare indicator" = $R.sideindicator
+
+}
+$Array2 += $Object2
+
+ 
+
+}
+
+}
+
+#Count users in both files
+"Unique from Both Files: "+($Array | sort-object computer | Select-Object * -Unique).count
+"Distinct in SCCM which is not available in AD: "+($Array1 | sort-object computer | Select-Object * -Unique).count
+"Distinct in AD which is not vailable in SCCM: "+($Array2 | sort-object computer | Select-Object * -Unique).count
+#Display results in console
+$Array | export-csv D:\SCCM_AD\unique.csv -NoTypeInformation
+$array1 | export-csv D:\SCCM_AD\SCCMdata_notin_AD.csv -NoTypeInformation
+$array2 | export-csv D:\SCCM_AD\ADdata_notavailablein_sccm.csv -NoTypeInformation
