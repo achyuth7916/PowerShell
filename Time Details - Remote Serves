@@ -1,0 +1,14 @@
+$obj1=@()
+$servers="localhost"
+foreach($server in $servers)
+{
+$a = get-wmiobject win32_localtime -ComputerName $server 
+$date="Time:"+$a.Hour+":"+$a.Minute+":"+$a.Second
+$day="Date:"+$a.Day+"/"+$a.Month+"/"+$a.Year
+$obj=New-Object -TypeName psobject
+ $obj | add-member Noteproperty Server $servers
+  $obj | add-member Noteproperty Time $date
+  $obj | add-member Noteproperty Date $day
+  $obj+=$obj1
+}
+$obj1 | export-csv .\out.csv -NoTypeInformation
